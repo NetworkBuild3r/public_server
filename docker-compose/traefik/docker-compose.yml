@@ -1,0 +1,73 @@
+services:
+  oauth:
+    container_name: oauth
+    image: thomseddon/traefik-forward-auth:2
+    env_file:
+      - /opt/appdata/auth/.env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.oauth.rule=Host(`oauth.ibhacked.us`)"
+      - "traefik.http.routers.oauth.entrypoints=https"
+      - "traefik.http.services.oauth.loadbalancer.server.port=4181"
+      # Forward Auth middleware
+      - "traefik.http.middlewares.oauth-forward-auth.forwardauth.address=http://oauth:4181"
+      # Headers middleware
+      - "traefik.http.middlewares.oauth-headers.headers.sslHost=ibhacked.us"
+      - "traefik.http.middlewares.oauth-headers.headers.sslRedirect=true"
+      - "traefik.http.middlewares.oauth-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.routers.oauth.tls=true"
+      # Combined middlewares
+      - "traefik.http.routers.oauth.middlewares=oauth-forward-auth,oauth-headers"
+    networks:
+      - plexguide
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8081:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/appdata/traefik/traefik.yml:/traefik.yml
+      - /opt/appdata/traefik/certs:/etc/traefik/acme/
+      - /opt/appdata/filebeat/logs/sonarr:/var/log/traefik
+    env_file:
+      - /opt/appdata/traefik/.env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN}`)"
+      - "traefik.http.routers.dashboard.entrypoints=https"
+      - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
+      - "traefik.http.services.dashboard.loadbalancer.server.port=8080"
+    restart: unless-stopped
+    networks:
+      - plexguide
+
+  portainer:
+    image: portainer/portainer-ce
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    networks:
+      - plexguide
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /etc/localtime:/etc/localtime:ro
+      - /opt/appdata/portainer:/data:rw
+    labels:
+      - traefik.enable=true
+      - traefik.http.middlewares.oauth.forwardauth.address=http://oauth:4181
+      - traefik.http.middlewares.portainer.headers.sslHost=ibhacked.us
+      - traefik.http.middlewares.portainer.headers.sslRedirect=true
+      - traefik.http.middlewares.portainer.headers.stsIncludeSubdomains=true
+      - traefik.http.routers.portainer.entrypoints=https
+      - traefik.http.routers.portainer.middlewares=oauth
+      - traefik.http.routers.portainer.rule=Host(`portainer.ibhacked.us`)
+      - traefik.http.routers.portainer.tls=true
+      - traefik.http.services.portainer.loadbalancer.server.port=9000
+
+networks:
+  plexguide:
+    external: true

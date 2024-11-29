@@ -1,0 +1,89 @@
+services:
+  netdisco-postgresql:
+    image: netdisco/netdisco:latest-postgresql
+    hostname: netdisco-postgresql
+    container_name: netdisco-postgresql
+    volumes:
+      - "/opt/appdata/netdisco-postgresql/pgdata:/var/lib/postgresql/data"
+    restart: unless-stopped
+
+  netdisco-backend:
+    image: netdisco/netdisco:latest-backend
+    hostname: netdisco-backend
+    container_name: netdisco-backend
+    init: true
+    volumes:
+      - "/opt/appdata/netdisco-backend/nd-site-local:/home/netdisco/nd-site-local"
+      - "/opt/appdata/netdisco-backend/config:/home/netdisco/environments"
+      - "/opt/appdata/netdisco-backend/logs:/home/netdisco/logs"
+    environment:
+      NETDISCO_DOMAIN: discover
+      NETDISCO_DB_HOST: netdisco-postgresql
+    depends_on:
+      - netdisco-postgresql
+    dns_opt:
+      - 'ndots:0'
+      - 'timeout:1'
+      - 'retries:0'
+      - 'attempts:1'
+      - edns0
+      - trustad
+    restart: unless-stopped
+
+  netdisco-web:
+    image: netdisco/netdisco:latest-web
+    hostname: netdisco-web
+    container_name: netdisco-web
+    init: true
+    volumes:
+      - "/opt/appdata/netdisco-web/nd-site-local:/home/netdisco/nd-site-local"
+      - "/opt/appdata/netdisco-web/config:/home/netdisco/environments"
+    environment:
+      NETDISCO_DOMAIN: discover
+      NETDISCO_DB_HOST: netdisco-postgresql
+      IPV: 4
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.netdisco-web.rule=Host(`netdisco.ibhacked.us`)"
+      - "traefik.http.routers.netdisco-web.entrypoints=https"
+      - "traefik.http.routers.netdisco-web.tls.certresolver=myresolver"
+      - "traefik.http.middlewares.netdisco-web-oauth.forwardauth.address=http://oauth:4181"
+      - "traefik.http.routers.netdisco-web.middlewares=netdisco-web-oauth"
+      - "traefik.http.routers.netdisco-web.tls=true"
+      - "traefik.http.services.netdisco-web.loadbalancer.server.port=5000"
+    depends_on:
+      - netdisco-postgresql
+    dns_opt:
+      - 'ndots:0'
+      - 'timeout:1'
+      - 'retries:0'
+      - 'attempts:1'
+      - edns0
+      - trustad
+    restart: unless-stopped
+
+  netdisco-do:
+    image: netdisco/netdisco:latest-do
+    hostname: netdisco-backend
+    container_name: netdisco-do
+    volumes:
+      - "/opt/appdata/netdisco-do/nd-site-local:/home/netdisco/nd-site-local"
+      - "/opt/appdata/netdisco-do/config:/home/netdisco/environments"
+    environment:
+      NETDISCO_DOMAIN: discover
+      NETDISCO_DB_HOST: netdisco-postgresql
+    depends_on:
+      - netdisco-postgresql
+    profiles:
+      - cli-manual
+    restart: unless-stopped
+
+volumes:
+  netdisco_pgdata:
+    driver: local
+  netdisco_logs:
+    driver: local
+  netdisco_config:
+    driver: local
+  netdisco_site_local:
+    driver: local

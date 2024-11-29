@@ -1,0 +1,125 @@
+services:
+  netbox: &netbox
+    image: docker.io/netboxcommunity/netbox:${VERSION-latest}
+    depends_on:
+      - postgres
+      - redis
+      - redis-cache
+    env_file: env/netbox.env
+    user: "unit:root"
+    healthcheck:
+      test: curl -f http://localhost:8080/login/ || exit 1
+      start_period: 90s
+      timeout: 3s
+      interval: 15s
+    volumes:
+      - /opt/appdata/netbox/configuration:/etc/netbox/config:z,ro
+      - /opt/appdata/netbox/netbox-media-files:/opt/netbox/netbox/media:z,rw
+      - /opt/appdata/netbox/netbox-reports-files:/opt/netbox/netbox/reports:z,rw
+      - /opt/appdata/netbox/netbox-scripts-files:/opt/netbox/netbox/scripts:z,rw
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.netbox.rule: Host(`netbox.ibhacked.us`)
+      traefik.http.routers.netbox.entrypoints: "https"
+      traefik.http.routers.netbox.tls: "true"
+      traefik.http.routers.netbox.tls.certresolver: "myresolver"
+      traefik.http.services.netbox.loadbalancer.server.port: "8080"
+    restart: unless-stopped
+    networks:
+      - plexguide
+  netbox-worker:
+    !!merge <<: *netbox
+    depends_on:
+      netbox:
+        condition: service_healthy
+    command:
+      - /opt/netbox/venv/bin/python
+      - /opt/netbox/netbox/manage.py
+      - rqworker
+    healthcheck:
+      test: ps -aux | grep -v grep | grep -q rqworker || exit 1
+      start_period: 20s
+      timeout: 3s
+      interval: 15s
+  netbox-housekeeping:
+    !!merge <<: *netbox
+    depends_on:
+      netbox:
+        condition: service_healthy
+    command:
+      - /opt/netbox/housekeeping.sh
+    healthcheck:
+      test: ps -aux | grep -v grep | grep -q housekeeping || exit 1
+      start_period: 20s
+      timeout: 3s
+      interval: 15s
+  postgres:
+    image: docker.io/postgres:16-alpine
+    container_name: postgres
+    healthcheck:
+      test: pg_isready -q -t 2 -d $$POSTGRES_DB -U $$POSTGRES_USER
+      start_period: 20s
+      timeout: 30s
+      interval: 10s
+      retries: 5
+    env_file: env/postgres.env
+    volumes:
+      - /opt/appdata/postgres/netbox-postgres-data:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    networks:
+      - plexguide
+  redis:
+    image: docker.io/valkey/valkey:8.0-alpine
+    container_name: redis
+    command:
+      - sh
+      - -c # this is to evaluate the $REDIS_PASSWORD from the env
+      - valkey-server --appendonly yes --requirepass $$REDIS_PASSWORD ## $$ because of docker-compose
+    healthcheck: &redis-healthcheck
+      test: '[ $$(valkey-cli --pass "$${REDIS_PASSWORD}" ping) = ''PONG'' ]'
+      start_period: 5s
+      timeout: 3s
+      interval: 1s
+      retries: 5
+    env_file: env/redis.env
+    volumes:
+      - /opt/appdata/redis/netbox-redis-data:/data
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    networks:
+      - plexguide
+  redis-cache:
+    image: docker.io/valkey/valkey:8.0-alpine
+    container_name: redis-cache
+    command:
+      - sh
+      - -c # this is to evaluate the $REDIS_PASSWORD from the env
+      - valkey-server --requirepass $$REDIS_PASSWORD ## $$ because of docker-compose
+    healthcheck: *redis-healthcheck
+    env_file: env/redis-cache.env
+    volumes:
+      - /opt/appdata/redis/netbox-redis-cache-data:/data
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    networks:
+      - plexguide
+  traefik:
+    image: traefik:v3.2
+networks:
+  plexguide:
+    external: true
+volumes:
+  netbox-media-files:
+    driver: local
+  netbox-postgres-data:
+    driver: local
+  netbox-redis-cache-data:
+    driver: local
+  netbox-redis-data:
+    driver: local
+  netbox-reports-files:
+    driver: local
+  netbox-scripts-files:
+    driver: local
