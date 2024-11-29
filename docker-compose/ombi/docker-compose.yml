@@ -1,0 +1,46 @@
+services:
+  ombi:
+    image: linuxserver/ombi:latest
+    container_name: ombi
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - LANGUAGE=en_US.UTF-8
+      - LANG=en_US.UTF-8
+      - TERM=xterm
+      - S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
+      - S6_VERBOSITY=1
+      - S6_STAGE2_HOOK=/docker-mods
+      - VIRTUAL_ENV=/lsiopy
+      - LSIO_FIRST_PARTY=true
+      - COMPlus_EnableDiagnostics=0
+      - DEBIAN_FRONTEND=noninteractive
+      - TMPDIR=/run/ombi-temp
+    volumes:
+      - /opt/appdata/ombi/appsettings.json:/opt/ombi/appsettings.json
+      - /opt/appdata/ombi:/config
+    restart: unless-stopped
+    networks:
+      plexguide:
+        aliases:
+          - ombi
+    labels:
+      traefik.enable: "true"
+      traefik.http.middlewares.ombi-headers.headers.browserXSSFilter: "true"
+      traefik.http.middlewares.ombi-headers.headers.contentTypeNosniff: "true"
+      traefik.http.middlewares.ombi-headers.headers.customResponseHeaders.X-Robots-Tag: "noindex,nofollow,nosnippet,noarchive,notranslate,noimageindex"
+      traefik.http.middlewares.ombi-headers.headers.forceSTSHeader: "true"
+      traefik.http.middlewares.ombi-headers.headers.sslHost: "ibhacked.us"
+      traefik.http.middlewares.ombi-headers.headers.sslRedirect: "true"
+      traefik.http.middlewares.ombi-headers.headers.stsIncludeSubdomains: "true"
+      traefik.http.middlewares.ombi-headers.headers.stsPreload: "true"
+      traefik.http.middlewares.ombi-headers.headers.stsSeconds: "315360000"
+      traefik.http.routers.ombi.entrypoints: "https"
+      traefik.http.routers.ombi.middlewares: "ombi-headers"
+      traefik.http.routers.ombi.rule: "Host(`ombi.ibhacked.us`)"
+      traefik.http.routers.ombi.tls: "true"
+      traefik.http.services.ombi.loadbalancer.server.port: "3579"
+
+networks:
+  plexguide:
+    external: true

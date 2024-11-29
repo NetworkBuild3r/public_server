@@ -29,7 +29,7 @@ services:
     networks:
       - plexguide
   netbox-worker:
-    !!merge <<: *netbox
+    <<: *netbox
     depends_on:
       netbox:
         condition: service_healthy
@@ -42,8 +42,10 @@ services:
       start_period: 20s
       timeout: 3s
       interval: 15s
+    labels: {}
+
   netbox-housekeeping:
-    !!merge <<: *netbox
+    <<: *netbox
     depends_on:
       netbox:
         condition: service_healthy
@@ -54,6 +56,8 @@ services:
       start_period: 20s
       timeout: 3s
       interval: 15s
+    labels: {}
+
   postgres:
     image: docker.io/postgres:16-alpine
     container_name: postgres

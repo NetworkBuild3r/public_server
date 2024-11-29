@@ -6,6 +6,8 @@ services:
     volumes:
       - "/opt/appdata/netdisco-postgresql/pgdata:/var/lib/postgresql/data"
     restart: unless-stopped
+    networks:
+      - plexguide
 
   netdisco-backend:
     image: netdisco/netdisco:latest-backend
@@ -29,6 +31,8 @@ services:
       - edns0
       - trustad
     restart: unless-stopped
+    networks:
+      - plexguide
 
   netdisco-web:
     image: netdisco/netdisco:latest-web
@@ -43,14 +47,16 @@ services:
       NETDISCO_DB_HOST: netdisco-postgresql
       IPV: 4
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.netdisco-web.rule=Host(`netdisco.ibhacked.us`)"
-      - "traefik.http.routers.netdisco-web.entrypoints=https"
-      - "traefik.http.routers.netdisco-web.tls.certresolver=myresolver"
-      - "traefik.http.middlewares.netdisco-web-oauth.forwardauth.address=http://oauth:4181"
-      - "traefik.http.routers.netdisco-web.middlewares=netdisco-web-oauth"
-      - "traefik.http.routers.netdisco-web.tls=true"
-      - "traefik.http.services.netdisco-web.loadbalancer.server.port=5000"
+      - traefik.enable=true
+      - traefik.http.middlewares.oauth.forwardauth.address=http://oauth:4181
+      - traefik.http.middlewares.netdisco.headers.sslHost=ibhacked.us
+      - traefik.http.middlewares.netdisco.headers.sslRedirect=true
+      - traefik.http.middlewares.netdisco.headers.stsIncludeSubdomains=true
+      - traefik.http.routers.netdisco.entrypoints=https
+      - traefik.http.routers.netdisco.middlewares=oauth
+      - traefik.http.routers.netdisco.rule=Host(`netdisco.ibhacked.us`)
+      - traefik.http.routers.netdisco.tls=true
+      - traefik.http.services.netdisco.loadbalancer.server.port=5000
     depends_on:
       - netdisco-postgresql
     dns_opt:
@@ -61,6 +67,8 @@ services:
       - edns0
       - trustad
     restart: unless-stopped
+    networks:
+      - plexguide
 
   netdisco-do:
     image: netdisco/netdisco:latest-do
@@ -77,6 +85,8 @@ services:
     profiles:
       - cli-manual
     restart: unless-stopped
+    networks:
+      - plexguide
 
 volumes:
   netdisco_pgdata:
@@ -87,3 +97,7 @@ volumes:
     driver: local
   netdisco_site_local:
     driver: local
+
+networks:
+  plexguide:
+    external: true
